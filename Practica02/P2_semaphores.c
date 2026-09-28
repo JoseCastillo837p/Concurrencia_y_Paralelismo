@@ -1,56 +1,74 @@
+// Programa: P2_semaphores.c (Problema Cocinero y Meseros)
+// Descripción: Implementación de sincronización de hilos usando semáforos.
+// Autor: José Manuel Castillo Dzib
+// Fecha: 2026/09/28
+
 #include <pthread.h>
 #include <semaphore.h>
 #include <stdio.h>
-#include <time.h>
 #include <unistd.h>
 
-#define NR_LOOP 10
-static void * cocinar(void* arg);
-static void * servir(void* arg);
+#define NR_LOOP 10 // Número total de platillos a preparar
 
-static int counter = 0;
+// Declaración de funciones para los hilos
+static void *cocinar(void* arg);
+static void *servir(void* arg);
 
-sem_t sem1;
+static int counter = 0; // Variable global: platillos en la barra listos para servir
+sem_t sem1; // Semáforo para notificar la disponibilidad de platillos
 
-int main(void)
-{
-  pthread_t cocinero, mesero_1, mesero_2;
+int main(void) {
+    pthread_t cocinero, mesero_1, mesero_2;
 
-  sem_init(&sem1, 0, 0);
+    // Inicializamos el semáforo en 0 (0 platillos listos al arrancar)
+    sem_init(&sem1, 0, 0);
 
-  pthread_create (&cocinero, NULL, *cocinar, NULL);
-  pthread_create (&mesero_1, NULL, *servir, NULL);
-  pthread_create (&mesero_2, NULL, *servir, NULL);
+    // Creamos el hilo del productor (Cocinero)
+    pthread_create(&cocinero, NULL, cocinar, NULL);
+    
+    // Creamos los hilos de los consumidores (Meseros) y les pasamos su nombre
+    pthread_create(&mesero_1, NULL, servir, "MESERO 1");
+    pthread_create(&mesero_2, NULL, servir, "MESERO 2");
 
-  pthread_join(cocinero, NULL);
-  pthread_join(mesero_1, NULL);
-  pthread_join(mesero_2, NULL);
+    // Esperamos a que los hilos terminen su jornada
+    pthread_join(cocinero, NULL);
+    pthread_join(mesero_1, NULL);
+    pthread_join(mesero_2, NULL);
 
-  // printf("Contador %d \n", counter);
+    // Destruimos el semáforo para liberar memoria
+    sem_destroy(&sem1);
 
-  return 0;
+    printf("Jornada terminada. Platillos sobrantes: %d\n", counter);
+    return 0;
 }
 
-static void * cocinar(void* arg) {
-  for (int i = 0; i < NR_LOOP; i++)
-  {
-    // sem_wait(&sem1);
-    // sem_post(&sem1);
-    counter++;
-    printf("COCINERO: Comida preparada.Platillos en espera: %d \n", counter);
-    sem_post(&sem1);
-    usleep(500000);
-  }
-  
+static void *cocinar(void* arg) {
+    for (int i = 0; i < NR_LOOP; i++) {
+        counter++; // El cocinero prepara un platillo nuevo
+        printf("COCINERO: Comida preparada. Platillos en espera: %d \n", counter);
+        
+        // Ejecutamos sem_post para sumarle 1 al semáforo (avisa que hay comida)
+        sem_post(&sem1);
+        
+        // Simula el tiempo de preparación (0.5 segundos)
+        usleep(500000); 
+    }
+    return NULL;
 }
 
-static void * servir(void* arg) {
-  for (int i = 0; i < NR_LOOP/2; i++)
-  {
-    sem_wait(&sem1);
-    counter--;
-    printf("MESERO: Comida servida. Platillos en espera: %d \n", counter);
-    sleep(2);
-  }
-  
+static void *servir(void* arg) {
+    char *nombre = (char *)arg; // Recibimos el nombre del mesero asignado
+    
+    // Cada mesero servirá exactamente la mitad de los platillos totales
+    for (int i = 0; i < NR_LOOP / 2; i++) {
+        // Ejecutamos sem_wait. Si el semáforo es 0, el mesero se bloquea hasta que el cocinero haga un sem_post
+        sem_wait(&sem1);
+        
+        counter--; // El mesero toma el platillo de la barra
+        printf("%s: Comida servida. Platillos en espera: %d \n", nombre, counter);
+        
+        // Simula el tiempo que tarda el mesero en llevarlo a la mesa (2 segundos)
+        sleep(2); 
+    }
+    return NULL;
 }
